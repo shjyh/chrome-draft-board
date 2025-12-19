@@ -631,3 +631,118 @@ input[type=range]::-webkit-slider-runnable-track {
     cursor: pointer;
     text-decoration: underline;
 }
+
+/* ===== RESPONSIVE COLOR PICKER ===== */
+
+/* Mobile: Compact color display (hidden by default) */
+.color-compact {
+    display: none;
+    align-items: center;
+    gap: 6px;
+}
+
+.current-color-display {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #ddd, 0 2px 4px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.current-color-display:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 2px var(--accent-color), 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.color-expand-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.color-expand-btn:hover {
+    background: rgba(0,0,0,0.05);
+    color: #000;
+}
+
+/* Color popup panel (mobile) */
+.color-popup {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 15px;
+    background: white;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+    border-radius: 12px;
+    padding: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    visibility: hidden;
+    z-index: 1000;
+}
+
+.color-popup.active {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+    margin-bottom: 20px;
+}
+
+.color-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 0;
+}
+
+/* ===== MEDIA QUERIES ===== */
+
+/* Small screens: Use compact color picker */
+@media (max-width: 920px) {
+    /* Hide full color list */
+    .color-presets {
+        display: none !important;
+    }
+
+    /* Show compact color picker */
+    .color-compact {
+        display: flex !important;
+    }
+
+    /* Adjust toolbar padding for smaller screens */
+    .bottom-toolbar {
+        padding: 10px 16px;
+        gap: 16px;
+    }
+
+    /* Reduce section gaps */
+    .toolbar-section {
+        gap: 6px;
+    }
+
+    /* Smaller icons */
+    .icon-btn {
+        padding: 6px;
+    }
+
+    /* Adjust slider buttons */
+    .slider-btn {
+        min-width: 36px;
+        padding: 6px;
+    }
+
+    .slider-btn .value-text {
+        font-size: 11px;
+    }
+}

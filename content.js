@@ -358,12 +358,33 @@ class BottomToolbar {
             </div>
 
             <!-- Colors -->
-            <div class="toolbar-section">
+            <div class="toolbar-section color-section">
+                <!-- Desktop: Full color list -->
                 <div class="color-presets">
                     ${colorHtml}
                     <!-- Custom -->
                     <div class="custom-color-wrapper ${isCustom ? 'active' : ''}" data-tooltip="${t.color}">
                         <input type="color" class="color-input" value="${isCustom ? s.color : '#ff0000'}">
+                    </div>
+                </div>
+
+                <!-- Mobile: Collapsed color picker -->
+                <div class="color-compact">
+                    <div class="current-color-display" style="background-color: ${s.tool === 'eraser' ? '#ccc' : s.color};" data-popup="popup-colors"></div>
+                    <button class="color-expand-btn" data-popup="popup-colors">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Color popup panel (for mobile) -->
+                <div class="color-popup" id="popup-colors">
+                    <div class="color-grid">
+                        ${colorHtml}
+                        <div class="custom-color-wrapper ${isCustom ? 'active' : ''}" data-tooltip="${t.color}">
+                            <input type="color" class="color-input" value="${isCustom ? s.color : '#ff0000'}">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -474,16 +495,27 @@ class BottomToolbar {
         });
 
         const isCustom = !this.colors.includes(state.color) && state.tool !== 'eraser';
-        const customWrapper = this.element.querySelector('.custom-color-wrapper');
+        this.element.querySelectorAll('.custom-color-wrapper').forEach(wrapper => {
+            if (isCustom) {
+                wrapper.classList.add('active');
+                wrapper.style.setProperty('--active-color', state.color);
+            } else {
+                wrapper.classList.remove('active');
+                wrapper.style.removeProperty('--active-color');
+            }
+        });
 
-        if (isCustom) {
-            customWrapper.classList.add('active');
-            // Use selected color for border using CSS variable or style
-            customWrapper.style.setProperty('--active-color', state.color);
-            this.element.querySelector('.color-input').value = state.color;
-        } else {
-            customWrapper.classList.remove('active');
-            customWrapper.style.removeProperty('--active-color');
+        // Update custom color input values
+        this.element.querySelectorAll('.color-input').forEach(input => {
+            if (isCustom) {
+                input.value = state.color;
+            }
+        });
+
+        // Update current color display (mobile)
+        const currentColorDisplay = this.element.querySelector('.current-color-display');
+        if (currentColorDisplay) {
+            currentColorDisplay.style.backgroundColor = state.tool === 'eraser' ? '#ccc' : state.color;
         }
 
         // 3. Update Slider Values (Text on buttons) and Inputs
@@ -511,9 +543,12 @@ class BottomToolbar {
         this.element.addEventListener('click', (e) => {
             const target = e.target.closest('button, .color-dot');
             if (!target) {
-                // Check if clicking outside slider popups to close them
+                // Check if clicking outside popups to close them
                 if (!e.target.closest('.slider-popup') && !e.target.closest('.slider-btn')) {
                     this.element.querySelectorAll('.slider-popup.active').forEach(p => p.classList.remove('active'));
+                }
+                if (!e.target.closest('.color-popup') && !e.target.closest('.color-expand-btn') && !e.target.closest('.current-color-display')) {
+                    this.element.querySelectorAll('.color-popup.active').forEach(p => p.classList.remove('active'));
                 }
                 return;
             }
@@ -545,6 +580,19 @@ class BottomToolbar {
                 this.element.querySelectorAll('.slider-popup').forEach(p => {
                     if (p !== popup) p.classList.remove('active');
                 });
+                // Close color popups
+                this.element.querySelectorAll('.color-popup.active').forEach(p => p.classList.remove('active'));
+
+                popup.classList.toggle('active');
+            }
+
+            // Toggle Color Popup (mobile)
+            if (target.matches('.color-expand-btn, .current-color-display')) {
+                const popupId = target.dataset.popup;
+                const popup = this.element.querySelector(`#${popupId}`);
+
+                // Close slider popups
+                this.element.querySelectorAll('.slider-popup').forEach(p => p.classList.remove('active'));
 
                 popup.classList.toggle('active');
             }
@@ -564,10 +612,17 @@ class BottomToolbar {
             const path = e.composedPath();
             if (!path.includes(this.element)) {
                 this.element.querySelectorAll('.slider-popup.active').forEach(p => p.classList.remove('active'));
+                this.element.querySelectorAll('.color-popup.active').forEach(p => p.classList.remove('active'));
             }
         };
         window.addEventListener('click', closePopups);
         // Note: this listener will persist. Ideally remove on destroy.
+
+        // Close color popup on resize if switching to desktop view
+        const handleResize = () => {
+            this.element.querySelectorAll('.color-popup.active').forEach(p => p.classList.remove('active'));
+        };
+        window.addEventListener('resize', handleResize);
 
         this.element.addEventListener('input', (e) => {
             if (e.target.matches('.color-input')) {
@@ -621,6 +676,9 @@ class BottomToolbar {
         if (this.isCollapsed) return;
         this.isCollapsed = true;
         this.element.classList.add('collapsed');
+        // Close all popups when collapsing
+        this.element.querySelectorAll('.slider-popup.active').forEach(p => p.classList.remove('active'));
+        this.element.querySelectorAll('.color-popup.active').forEach(p => p.classList.remove('active'));
         // Update droplet trigger to show
         this.app.dropletTrigger.update(this.app.state);
     }
