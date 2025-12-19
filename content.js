@@ -17,6 +17,7 @@ const I18N = {
         eraser: "Eraser",
         clear: "Clear All",
         close: "Close",
+        collapse: "Minimize Toolbar",
     },
     zh: {
         draft: "草稿板",
@@ -30,6 +31,7 @@ const I18N = {
         eraser: "橡皮擦",
         clear: "清空画板",
         close: "关闭",
+        collapse: "收起工具栏",
     }
 };
 
@@ -88,7 +90,11 @@ class DraftBoardApp {
         this.toolbar = new BottomToolbar(this);
         this.shadow.appendChild(this.toolbar.element);
 
-        // 3. Floating Button (Top)
+        // 3. Droplet Trigger (shows when toolbar is collapsed)
+        this.dropletTrigger = new DropletTrigger(this);
+        this.shadow.appendChild(this.dropletTrigger.element);
+
+        // 4. Floating Button (Top)
         this.floatingButton = new FloatingButton(this);
         this.shadow.appendChild(this.floatingButton.element);
     }
@@ -98,6 +104,7 @@ class DraftBoardApp {
         this.state = { ...this.state, ...updates };
         this.canvasManager.update(this.state);
         this.toolbar.update(this.state); // Renamed from settingsPanel
+        this.dropletTrigger.update(this.state);
         this.floatingButton.update(this.state);
 
         // Persist Settings (Debounced slightly or just save)
@@ -222,6 +229,61 @@ class FloatingButton {
     }
 }
 
+// Droplet Trigger - Shows when toolbar is collapsed
+class DropletTrigger {
+    constructor(app) {
+        this.app = app;
+        this.element = document.createElement('div');
+        this.element.className = 'toolbar-droplet-trigger';
+
+        this.render();
+        this.attachEvents();
+    }
+
+    render() {
+        // SVG shape with curved edges that tangentially meet the bottom
+        this.element.innerHTML = `
+            <svg class="trigger-shape" viewBox="0 0 60 16" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="trigger-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:rgba(255,255,255,0.98);stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:rgba(255,255,255,0.88);stop-opacity:1" />
+                    </linearGradient>
+                    <filter id="trigger-blur">
+                        <feGaussianBlur in="SourceGraphic" stdDeviation="0.5" />
+                    </filter>
+                </defs>
+                <!-- Shape with perfectly tangent curved edges -->
+                <path class="trigger-path" d="
+                    M 0,16
+                    C 8,16 12,10 18,4
+                    C 24,0 27,0 30,0
+                    C 33,0 36,0 42,4
+                    C 48,10 52,16 60,16
+                    L 60,16 L 0,16 Z"
+                    fill="url(#trigger-gradient)"
+                    filter="url(#trigger-blur)" />
+            </svg>
+            <div class="trigger-dot"></div>
+        `;
+    }
+
+    update(state) {
+        // Show droplet only when toolbar is collapsed and canvas is open
+        if (state.isOpen && this.app.toolbar.isCollapsed) {
+            this.element.classList.add('visible');
+        } else {
+            this.element.classList.remove('visible');
+        }
+    }
+
+    attachEvents() {
+        this.element.addEventListener('mouseenter', () => {
+            this.app.toolbar.expand();
+        });
+    }
+}
+
 // Replaces SettingsPanel
 class BottomToolbar {
     constructor(app) {
@@ -245,8 +307,15 @@ class BottomToolbar {
         // Track current language for re-rendering on change
         this.currentLang = this.app.state.lang;
 
+        // Auto-hide state
+        this.isCollapsed = false;
+        this.hideTimer = null;
+        this.hideDelay = 3000; // 3 seconds
+        this.wasOpen = false; // Track previous open state
+
         this.render();
         this.attachEvents();
+        this.attachAutoHideEvents();
     }
 
     render() {
@@ -355,13 +424,34 @@ class BottomToolbar {
             this.render();
         }
 
+        // Detect state change from closed to open
+        const justOpened = !this.wasOpen && state.isOpen;
+
         if (state.isOpen) {
             this.element.classList.add('visible');
+            // When opening, ensure toolbar is expanded
+            if (this.isCollapsed) {
+                this.expand();
+            }
+
+            // If just opened, start the hide timer
+            if (justOpened) {
+                this.startHideTimer();
+            }
         } else {
             this.element.classList.remove('visible');
             // Close all popups when hidden
             this.element.querySelectorAll('.slider-popup.active').forEach(p => p.classList.remove('active'));
+            // Reset collapsed state when closing
+            this.cancelHideTimer();
+            if (this.isCollapsed) {
+                this.isCollapsed = false;
+                this.element.classList.remove('collapsed');
+            }
         }
+
+        // Update previous open state
+        this.wasOpen = state.isOpen;
 
         const t = I18N[state.lang];
 
@@ -488,6 +578,51 @@ class BottomToolbar {
                 this.app.updateState({ bgOpacity: parseFloat(e.target.value) });
             }
         });
+    }
+
+    attachAutoHideEvents() {
+        // Mouse enter - cancel hide timer and expand if collapsed
+        this.element.addEventListener('mouseenter', () => {
+            this.cancelHideTimer();
+            if (this.isCollapsed) {
+                this.expand();
+            }
+        });
+
+        // Mouse leave - start hide timer
+        this.element.addEventListener('mouseleave', () => {
+            this.startHideTimer();
+        });
+    }
+
+    startHideTimer() {
+        this.cancelHideTimer();
+        this.hideTimer = setTimeout(() => {
+            this.collapse();
+        }, this.hideDelay);
+    }
+
+    cancelHideTimer() {
+        if (this.hideTimer) {
+            clearTimeout(this.hideTimer);
+            this.hideTimer = null;
+        }
+    }
+
+    collapse() {
+        if (this.isCollapsed) return;
+        this.isCollapsed = true;
+        this.element.classList.add('collapsed');
+        // Update droplet trigger to show
+        this.app.dropletTrigger.update(this.app.state);
+    }
+
+    expand() {
+        if (!this.isCollapsed) return;
+        this.isCollapsed = false;
+        this.element.classList.remove('collapsed');
+        // Update droplet trigger to hide
+        this.app.dropletTrigger.update(this.app.state);
     }
 }
 
