@@ -3,7 +3,7 @@
   "name": "Draft Board",
   "version": "0.1.0",
   "description": "Transparent canvas draft board overlay for any page.",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqjm5WZCAUGs7eSLNJ4K73Sszk8RHF2lgOwXBRqmVd2s5ONF95boaX1+dZ7dCc8LWxjb01yFd5EuZVLX3XQKE0yGlGgTdXpr0BIZXmimGmNJH/zhhMQfhvixw++6Dv5E5f2/t3HnRD7U2WfN3pdzPkfuuZbL3E9NfCsP+0UnIlZOtLMvz3UHcpTxl6vwg+eT72oDpF4W+QO/VBJzumi76xxdDDpLJZgJkBhw19OAwQe38K+IAPxUjVWPx+WvGek1Snd8GUJLKu",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5xRQaHPpS3+COo1Rv7zXhWDFoQ2/1S6DPSxmyeP1dE+4j0aS71EKsXgCtl/x0aiDJUZx4hFKGzyOivzXdQdANn28vBePegJb5NYxum3Y3ykX2nOM2DpiVA+xKWnZM4npvqYVG8Uahl2pn6UEnpIRobhM1u6i1bPZCftnVKmVbpl+IaJHUpcni9bBgwdyC6t6XilU/g4SgWHq12pCaU9EMxD7Tm4/j4jWlZbuT/Hz0KNfrJeF+sDOBnA3JP1ADrWOg4wEbTcsGA6mnUgI0EupHBsUkEC2WY8e3XVmMNbrmncVa5mQif3847VBaXoxeImrJTZ3nFJ869os49PdrPr18wIDAQAB",
   "permissions": [
     "storage"
   ],
