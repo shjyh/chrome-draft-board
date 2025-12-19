@@ -3,6 +3,7 @@
   "name": "Draft Board",
   "version": "0.1.0",
   "description": "Transparent canvas draft board overlay for any page.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqjm5WZCAUGs7eSLNJ4K73Sszk8RHF2lgOwXBRqmVd2s5ONF95boaX1+dZ7dCc8LWxjb01yFd5EuZVLX3XQKE0yGlGgTdXpr0BIZXmimGmNJH/zhhMQfhvixw++6Dv5E5f2/t3HnRD7U2WfN3pdzPkfuuZbL3E9NfCsP+0UnIlZOtLMvz3UHcpTxl6vwg+eT72oDpF4W+QO/VBJzumi76xxdDDpLJZgJkBhw19OAwQe38K+IAPxUjVWPx+WvGek1Snd8GUJLKu",
   "permissions": [
     "storage"
   ],
