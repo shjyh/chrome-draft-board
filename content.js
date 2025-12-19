@@ -6,12 +6,12 @@
 // I18n strings
 const I18N = {
     en: {
-        draft: "Draft",
+        draft: "Draft Board",
         settings: "Settings",
         color: "Color",
         size: "Size",
-        brushOpacity: "Brush Opacity",
-        bgOpacity: "Background Dimming",
+        brushOpacity: "Stroke Opacity",
+        bgOpacity: "Dim Background",
         tools: "Tools",
         brush: "Brush",
         eraser: "Eraser",
@@ -19,16 +19,16 @@ const I18N = {
         close: "Close",
     },
     zh: {
-        draft: "草稿",
+        draft: "草稿板",
         settings: "设置",
         color: "颜色",
-        size: "粗细",
-        brushOpacity: "画笔透明度",
+        size: "笔触粗细",
+        brushOpacity: "笔触透明度",
         bgOpacity: "背景暗度",
         tools: "工具",
         brush: "画笔",
-        eraser: "橡皮",
-        clear: "清空",
+        eraser: "橡皮擦",
+        clear: "清空画板",
         close: "关闭",
     }
 };
@@ -242,6 +242,9 @@ class BottomToolbar {
             '#FFFFFF'  // White
         ];
 
+        // Track current language for re-rendering on change
+        this.currentLang = this.app.state.lang;
+
         this.render();
         this.attachEvents();
     }
@@ -345,6 +348,13 @@ class BottomToolbar {
     }
 
     update(state) {
+        // Check if language changed - if so, re-render entire toolbar
+        // Note: No need to re-attach events since we use event delegation
+        if (this.currentLang !== state.lang) {
+            this.currentLang = state.lang;
+            this.render();
+        }
+
         if (state.isOpen) {
             this.element.classList.add('visible');
         } else {
