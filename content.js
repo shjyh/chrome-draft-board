@@ -338,6 +338,7 @@ class BottomToolbar {
         // More recognizable block eraser
         const iconEraser = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.56-10.6c.78-.79 2.05-.79 2.83 0zM4.22 15.58l3.54 3.53c.78.79 2.05.79 2.83 0L19.78 10 17 7.17 4.22 15.58z"/></svg>`;
         const iconClear = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+        const iconCollapse = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>`;
         const iconClose = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
 
         // Icons for Sliders
@@ -407,6 +408,10 @@ class BottomToolbar {
             <div class="toolbar-section">
                  <button class="icon-btn" id="btn-clear" data-tooltip="${t.clear}">
                     ${iconClear}
+                </button>
+                <div style="width:1px;"></div>
+                 <button class="icon-btn" id="btn-collapse" data-tooltip="${t.collapse}">
+                    ${iconCollapse}
                 </button>
                 <div style="width:1px;"></div>
                  <button class="icon-btn" id="btn-hide" data-tooltip="${t.close}">
@@ -524,6 +529,9 @@ class BottomToolbar {
             }
             if (target.id === 'btn-clear') {
                 this.app.canvasManager.clear();
+            }
+            if (target.id === 'btn-collapse') {
+                this.collapse();
             }
             if (target.id === 'btn-hide') {
                 this.app.toggleCanvas();
