@@ -107,6 +107,12 @@ class DraftBoardApp {
     toggleSettings() {
         this.settingsPanel.toggle();
     }
+
+    destroy() {
+        if (this.root && this.root.parentNode) {
+            this.root.parentNode.removeChild(this.root);
+        }
+    }
 }
 
 class FloatingButton {
@@ -302,9 +308,8 @@ class SettingsPanel {
             </div>
             <input type="range" class="slider" id="bg-opacity-slider" min="0" max="0.9" step="0.01" value="${s.bgOpacity}">
 
-             <div class="setting-row" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
-                <span class="lang-switch">${s.lang === 'zh' ? 'English' : '中文'}</span>
-                <button class="tool-btn" id="btn-clear" style="color: red;">${t.clear}</button>
+            <div class="setting-row" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+                <button class="tool-btn" id="btn-clear" style="color: red; width: 100%;">${t.clear}</button>
             </div>
         `;
     }
@@ -344,8 +349,7 @@ class SettingsPanel {
         this.element.querySelector('#brush-opacity-slider').value = state.brushOpacity;
         this.element.querySelector('#bg-opacity-slider').value = state.bgOpacity;
 
-        // Update Lang Switch
-        this.element.querySelector('.lang-switch').textContent = state.lang === 'zh' ? 'English' : '中文';
+        // Update Clear Btn
         this.element.querySelector('#btn-clear').textContent = t.clear;
     }
 
@@ -365,9 +369,6 @@ class SettingsPanel {
             }
             if (target.matches('.tool-btn[data-tool]')) {
                 this.app.updateState({ tool: target.dataset.tool });
-            }
-            if (target.matches('.lang-switch')) {
-                this.app.updateState({ lang: this.app.state.lang === 'zh' ? 'en' : 'zh' });
             }
             if (target.matches('#btn-clear')) {
                 this.app.canvasManager.clear();
@@ -658,5 +659,59 @@ class CanvasManager {
     }
 }
 
-// Initialize
-new DraftBoardApp();
+// Initialization Logic
+let appInstance = null;
+
+function initApp(initialLang) {
+    if (!appInstance) {
+        appInstance = new DraftBoardApp();
+        if (initialLang) {
+            appInstance.updateState({ lang: initialLang });
+        }
+    }
+}
+
+function destroyApp() {
+    if (appInstance) {
+        appInstance.destroy();
+        appInstance = null;
+    }
+}
+
+// 1. Check Storage on Load
+const hostname = window.location.hostname;
+const storageKey = `site:${hostname}`;
+
+chrome.storage.local.get([storageKey, 'appLanguage'], (result) => {
+    // Check enablement
+    if (result[storageKey] === true) {
+        initApp(result.appLanguage);
+    }
+});
+
+// 2. Listen for Messages (Popup toggle)
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'toggle_extension') {
+        if (request.enabled) {
+            // Get lang again or pass it? Popup didn't pass it.
+            // We can just init, and let it use default or fetch.
+            // Better: just fetch storage in init if not passed?
+            // Actually simple: `initApp` can fetch storage itself inside if needed, or we just rely on defaults if immediate sync isn't critical (it will sync on storage change).
+            // But let's be cleaner.
+            chrome.storage.local.get(['appLanguage'], (res) => {
+                initApp(res.appLanguage);
+            });
+        } else {
+            destroyApp();
+        }
+    }
+});
+
+// 3. Listen for Storage Changes (Global Lang)
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local' && changes.appLanguage) {
+        if (appInstance) {
+            appInstance.updateState({ lang: changes.appLanguage.newValue });
+        }
+    }
+});
