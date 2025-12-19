@@ -67,7 +67,8 @@ class DraftBoardApp {
             size: 5,
             brushOpacity: 1,
             bgOpacity: 0.3, // Default 30% black mask
-            lang: 'en' // Default to English, will detect browser lang
+            lang: 'en', // Default to English, will detect browser lang
+            logoPosition: null // { left: number, top: number } or null for default
         };
 
         // Detect language
@@ -120,7 +121,8 @@ class DraftBoardApp {
             color: this.state.color,
             size: this.state.size,
             brushOpacity: this.state.brushOpacity,
-            bgOpacity: this.state.bgOpacity
+            bgOpacity: this.state.bgOpacity,
+            logoPosition: this.state.logoPosition
         };
         chrome.storage.local.set({ [settingsKey]: toSave });
     }
@@ -149,6 +151,7 @@ class FloatingButton {
 
         this.render();
         this.attachEvents();
+        this.applyPosition();
     }
 
     render() {
@@ -162,6 +165,18 @@ class FloatingButton {
         `;
     }
 
+    applyPosition() {
+        const pos = this.app.state.logoPosition;
+        if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
+            // Apply saved position
+            this.element.style.right = 'auto';
+            this.element.style.bottom = 'auto';
+            this.element.style.left = `${pos.left}px`;
+            this.element.style.top = `${pos.top}px`;
+        }
+        // Otherwise use default CSS position (right/bottom)
+    }
+
     update(state) {
         const logo = this.element.querySelector('#main-logo');
         if (logo) {
@@ -170,6 +185,12 @@ class FloatingButton {
             } else {
                 logo.classList.remove('active-state');
             }
+        }
+
+        // Apply position if it changed
+        if (state.logoPosition !== this.lastPosition) {
+            this.lastPosition = state.logoPosition;
+            this.applyPosition();
         }
     }
 
@@ -218,6 +239,15 @@ class FloatingButton {
 
             if (!isDragging) {
                 this.app.toggleCanvas();
+            } else {
+                // Save position after dragging
+                const rect = this.element.getBoundingClientRect();
+                this.app.updateState({
+                    logoPosition: {
+                        left: rect.left,
+                        top: rect.top
+                    }
+                });
             }
 
             setTimeout(() => {
