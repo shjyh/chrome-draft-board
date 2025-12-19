@@ -37,22 +37,23 @@ class DraftBoardApp {
     constructor() {
         this.root = document.createElement('div');
         this.root.id = 'draft-board-root';
+        // Prevent FOUC: Hide host until styles load
+        this.root.style.visibility = 'hidden';
+
         // Create Shadow DOM
         this.shadow = this.root.attachShadow({ mode: 'open' });
-
-        // Critical styles to prevent FOUC (Flash of Unstyled Content)
-        const criticalStyle = document.createElement('style');
-        criticalStyle.textContent = `
-        .menu-items, .settings-panel { opacity: 0; pointer-events: none; }
-        .menu-items { transform: translateY(20px); }
-        .settings-panel { transform: translateX(20px) scale(0.95); }
-    `;
-        this.shadow.appendChild(criticalStyle);
 
         // Load Styles
         const style = document.createElement('link');
         style.rel = 'stylesheet';
         style.href = chrome.runtime.getURL('style.css');
+
+        // Show after load
+        const show = () => { this.root.style.visibility = 'visible'; };
+        style.onload = show;
+        style.onerror = show; // Ensure shows even if error
+        setTimeout(show, 500); // Safety fallback
+
         this.shadow.appendChild(style);
 
         // Initial State
@@ -83,9 +84,9 @@ class DraftBoardApp {
         this.canvasManager = new CanvasManager(this);
         this.shadow.appendChild(this.canvasManager.element);
 
-        // 2. Settings Panel
-        this.settingsPanel = new SettingsPanel(this);
-        this.shadow.appendChild(this.settingsPanel.element);
+        // 2. Bottom Toolbar (Replaces SettingsPanel)
+        this.toolbar = new BottomToolbar(this);
+        this.shadow.appendChild(this.toolbar.element);
 
         // 3. Floating Button (Top)
         this.floatingButton = new FloatingButton(this);
@@ -96,8 +97,25 @@ class DraftBoardApp {
     updateState(updates) {
         this.state = { ...this.state, ...updates };
         this.canvasManager.update(this.state);
-        this.settingsPanel.update(this.state);
+        this.toolbar.update(this.state); // Renamed from settingsPanel
         this.floatingButton.update(this.state);
+
+        // Persist Settings (Debounced slightly or just save)
+        this.saveSettings();
+    }
+
+    saveSettings() {
+        const hostname = window.location.hostname;
+        const settingsKey = `settings:${hostname}`;
+        // Save relevant keys
+        const toSave = {
+            tool: this.state.tool,
+            color: this.state.color,
+            size: this.state.size,
+            brushOpacity: this.state.brushOpacity,
+            bgOpacity: this.state.bgOpacity
+        };
+        chrome.storage.local.set({ [settingsKey]: toSave });
     }
 
     toggleCanvas() {
@@ -105,7 +123,8 @@ class DraftBoardApp {
     }
 
     toggleSettings() {
-        this.settingsPanel.toggle();
+        // No-op or toggle toolbar? Toolbar is synced with isOpen.
+        // We can remove this method if unused.
     }
 
     destroy() {
@@ -127,38 +146,17 @@ class FloatingButton {
 
     render() {
         const logoUrl = chrome.runtime.getURL('logo.svg');
-        const t = I18N[this.app.state.lang];
+        // No text needed for logo-only button
 
         this.element.innerHTML = `
             <div class="logo-btn" id="main-logo" title="Draft Board">
                 <img src="${logoUrl}" alt="Draft Board" draggable="false">
             </div>
-            <div class="menu-items">
-                <button class="menu-item" id="btn-settings" data-tooltip="${t.settings}">
-                    ⚙️
-                </button>
-                <button class="menu-item" id="btn-draft" data-tooltip="${t.draft}">
-                    ✏️
-                </button>
-            </div>
         `;
     }
 
     update(state) {
-        // Re-render text if lang changes
-        const t = I18N[state.lang];
-        const btnSettings = this.element.querySelector('#btn-settings');
-        const btnDraft = this.element.querySelector('#btn-draft');
         const logo = this.element.querySelector('#main-logo');
-
-        if (btnSettings) btnSettings.setAttribute('data-tooltip', t.settings);
-        if (btnDraft) {
-            btnDraft.setAttribute('data-tooltip', state.isOpen ? t.close : t.draft);
-            // Toggle Icon
-            btnDraft.textContent = state.isOpen ? '✖️' : '✏️';
-        }
-
-        // Toggle Logo Active State
         if (logo) {
             if (state.isOpen) {
                 logo.classList.add('active-state');
@@ -176,20 +174,10 @@ class FloatingButton {
         let startX, startY, initialLeft, initialTop;
 
         const onMouseDown = (e) => {
-            // Only allow left click drag
             if (e.button !== 0) return;
-            isDragging = false; // Reset, assume click until moved
+            isDragging = false;
 
-            // Get current position
             const rect = this.element.getBoundingClientRect();
-            // We use right/bottom in CSS, but for dragging it's easier to switch to fixed left/top or calculate offsets
-            // Let's stick to modifying transforming or left/top.
-
-            // NOTE: Interaction with CSS 'right' property:
-            // When we start dragging, we should "lock" the element to left/top to avoid resize issues
-            // But simplify: just update transform? No, that limits range.
-            // Let's set left/top explicitly and clear right/bottom.
-
             this.element.style.right = 'auto';
             this.element.style.bottom = 'auto';
             this.element.style.left = rect.left + 'px';
@@ -204,18 +192,6 @@ class FloatingButton {
             window.addEventListener('mouseup', onMouseUp);
         };
 
-        const checkPosition = () => {
-            const rect = this.element.getBoundingClientRect();
-            const centerY = rect.top + rect.height / 2;
-            const windowHeight = window.innerHeight;
-
-            if (centerY < windowHeight / 2) {
-                this.element.classList.add('pos-top');
-            } else {
-                this.element.classList.remove('pos-top');
-            }
-        };
-
         const onMouseMove = (e) => {
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
@@ -227,43 +203,45 @@ class FloatingButton {
 
             this.element.style.left = `${initialLeft + dx}px`;
             this.element.style.top = `${initialTop + dy}px`;
-
-            checkPosition();
         };
 
         const onMouseUp = () => {
             window.removeEventListener('mousemove', onMouseMove);
             window.removeEventListener('mouseup', onMouseUp);
-            this.element.classList.remove('is-dragging');
-            checkPosition(); // Ensure final state is correct
-        };
 
-        const onResize = () => {
-            checkPosition();
+            if (!isDragging) {
+                this.app.toggleCanvas();
+            }
+
+            setTimeout(() => {
+                this.element.classList.remove('is-dragging');
+            }, 50);
         };
-        window.addEventListener('resize', onResize);
 
         logo.addEventListener('mousedown', onMouseDown);
-
-        // Menu Actions
-        this.element.querySelector('#btn-draft').addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.app.toggleCanvas();
-        });
-
-        this.element.querySelector('#btn-settings').addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.app.toggleSettings();
-        });
     }
 }
 
-class SettingsPanel {
+// Replaces SettingsPanel
+class BottomToolbar {
     constructor(app) {
         this.app = app;
-        this.isOpen = false;
         this.element = document.createElement('div');
-        this.element.className = 'settings-panel';
+        this.element.className = 'bottom-toolbar';
+
+        // Color Presets
+        this.colors = [
+            '#000000', // Black
+            '#FF3B30', // Red
+            '#FF9500', // Orange
+            '#FFCC00', // Yellow
+            '#4CD964', // Green
+            '#5AC8FA', // Blue
+            '#007AFF', // Deep Blue
+            '#5856D6', // Purple
+            '#FFFFFF'  // White
+        ];
+
         this.render();
         this.attachEvents();
     }
@@ -272,134 +250,234 @@ class SettingsPanel {
         const s = this.app.state;
         const t = I18N[s.lang];
 
+        // Generate Color Dots
+        const colorHtml = this.colors.map(c => `
+            <div class="color-dot ${s.color === c && s.tool !== 'eraser' ? 'active' : ''}" 
+                 style="background-color: ${c};" 
+                 data-color="${c}"
+                 data-tooltip="${c}"></div>
+        `).join('');
+
+        // Custom Color Active Check
+        const isCustom = !this.colors.includes(s.color) && s.tool !== 'eraser';
+
+        // SVG Icons
+        const iconBrush = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+        // More recognizable block eraser
+        const iconEraser = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.56-10.6c.78-.79 2.05-.79 2.83 0zM4.22 15.58l3.54 3.53c.78.79 2.05.79 2.83 0L19.78 10 17 7.17 4.22 15.58z"/></svg>`;
+        const iconClear = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+        const iconClose = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+
+        // Icons for Sliders
+        const iconSize = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>`;
+        const iconOpacity = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><circle cx="12" cy="12" r="4" opacity="0.5"/></svg>`;
+        const iconBg = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/><path d="M7 17h10v-2H7v2zm0-4h10v-2H7v2zm0-4h10V7H7v2z"/></svg>`;
+
         this.element.innerHTML = `
-            <div class="panel-header">
-                <span>${t.settings}</span>
-                <button class="close-btn">×</button>
+            <!-- Tools -->
+            <div class="toolbar-section">
+                <button class="icon-btn ${s.tool === 'brush' ? 'active' : ''}" data-tool="brush" data-tooltip="${t.brush}">
+                    ${iconBrush}
+                </button>
+                <button class="icon-btn ${s.tool === 'eraser' ? 'active' : ''}" data-tool="eraser" data-tooltip="${t.eraser}">
+                    ${iconEraser}
+                </button>
             </div>
-            
-            <div class="setting-row">
-                <span class="setting-label" id="label-tools">${t.tools}</span>
-                <div class="tool-selector">
-                    <button class="tool-btn ${s.tool === 'brush' ? 'active' : ''}" data-tool="brush">${t.brush}</button>
-                    <button class="tool-btn ${s.tool === 'eraser' ? 'active' : ''}" data-tool="eraser">${t.eraser}</button>
+
+            <!-- Colors -->
+            <div class="toolbar-section">
+                <div class="color-presets">
+                    ${colorHtml}
+                    <!-- Custom -->
+                    <div class="custom-color-wrapper ${isCustom ? 'active' : ''}" data-tooltip="${t.color}">
+                        <input type="color" class="color-input" value="${isCustom ? s.color : '#ff0000'}">
+                    </div>
                 </div>
             </div>
 
-            <div class="setting-row">
-                <span class="setting-label" id="label-color">${t.color}</span>
-                <div class="color-preview" style="background-color: ${s.color}">
-                    <input type="color" class="color-input" value="${s.color}">
+            <!-- Vertical Sliders -->
+            <div class="toolbar-section">
+                <!-- Size -->
+                <div class="slider-btn-group">
+                    <div class="slider-popup" id="popup-size">
+                        <input type="range" class="slider-vertical" id="size-slider" min="1" max="50" value="${s.size}">
+                    </div>
+                    <button class="slider-btn" data-popup="popup-size" data-tooltip="${t.size}">
+                        ${iconSize}
+                        <span class="value-text" id="val-size">${s.size}</span>
+                    </button>
+                </div>
+
+                <!-- Brush Opacity -->
+                <div class="slider-btn-group">
+                    <div class="slider-popup" id="popup-opacity">
+                         <input type="range" class="slider-vertical" id="brush-opacity-slider" min="0.01" max="1" step="0.01" value="${s.brushOpacity}">
+                    </div>
+                    <button class="slider-btn" data-popup="popup-opacity" data-tooltip="${t.brushOpacity}">
+                        ${iconOpacity}
+                        <span class="value-text" id="val-opacity">${Math.round(s.brushOpacity * 100)}%</span>
+                    </button>
+                </div>
+
+                <!-- Bg Opacity -->
+                <div class="slider-btn-group">
+                    <div class="slider-popup" id="popup-bg">
+                         <input type="range" class="slider-vertical" id="bg-opacity-slider" min="0" max="0.9" step="0.01" value="${s.bgOpacity}">
+                    </div>
+                    <button class="slider-btn" data-popup="popup-bg" data-tooltip="${t.bgOpacity}">
+                        ${iconBg}
+                        <span class="value-text" id="val-bg">${Math.round(s.bgOpacity * 100)}%</span>
+                    </button>
                 </div>
             </div>
 
-            <div class="setting-row">
-               <span class="setting-label" id="label-size">${t.size} (${s.size}px)</span>
-            </div>
-            <input type="range" class="slider" id="size-slider" min="1" max="50" value="${s.size}">
-
-            <div class="setting-row">
-               <span class="setting-label" id="label-brush-opacity">${t.brushOpacity} (${Math.round(s.brushOpacity * 100)}%)</span>
-            </div>
-            <input type="range" class="slider" id="brush-opacity-slider" min="0.01" max="1" step="0.01" value="${s.brushOpacity}">
-
-            <div class="setting-row">
-               <span class="setting-label" id="label-bg-opacity">${t.bgOpacity} (${Math.round(s.bgOpacity * 100)}%)</span>
-            </div>
-            <input type="range" class="slider" id="bg-opacity-slider" min="0" max="0.9" step="0.01" value="${s.bgOpacity}">
-
-            <div class="setting-row" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
-                <button class="tool-btn" id="btn-clear" style="color: red; width: 100%;">${t.clear}</button>
+             <!-- Actions -->
+            <div class="toolbar-section">
+                 <button class="icon-btn" id="btn-clear" data-tooltip="${t.clear}">
+                    ${iconClear}
+                </button>
+                <div style="width:1px;"></div>
+                 <button class="icon-btn" id="btn-hide" data-tooltip="${t.close}">
+                    ${iconClose}
+                </button>
             </div>
         `;
     }
 
     update(state) {
-        // Re-render completely for simplicity to handle lang changes and active states
-        // In a framework we would diff, here we just rewrite innerHTML is easiest for this scale, 
-        // but it breaks event listeners. Better to update DOM nodes individually.
+        if (state.isOpen) {
+            this.element.classList.add('visible');
+        } else {
+            this.element.classList.remove('visible');
+            // Close all popups when hidden
+            this.element.querySelectorAll('.slider-popup.active').forEach(p => p.classList.remove('active'));
+        }
 
         const t = I18N[state.lang];
 
-        // Update texts
-        this.element.querySelector('.panel-header span').textContent = t.settings;
-        this.element.querySelector('#label-tools').textContent = t.tools;
-        this.element.querySelector('#label-color').textContent = t.color;
-
-        this.element.querySelectorAll('.tool-btn[data-tool="brush"]').forEach(b => {
-            b.textContent = t.brush;
-            b.className = `tool-btn ${state.tool === 'brush' ? 'active' : ''}`;
-        });
-        this.element.querySelectorAll('.tool-btn[data-tool="eraser"]').forEach(b => {
-            b.textContent = t.eraser;
-            b.className = `tool-btn ${state.tool === 'eraser' ? 'active' : ''}`;
+        // 1. Update Tool Buttons
+        this.element.querySelectorAll('[data-tool]').forEach(btn => {
+            if (btn.dataset.tool === state.tool) btn.classList.add('active');
+            else btn.classList.remove('active');
         });
 
-        // Update Color
-        this.element.querySelector('.color-preview').style.backgroundColor = state.color;
-        this.element.querySelector('.color-input').value = state.color;
+        // 2. Update Colors
+        this.element.querySelectorAll('.color-dot').forEach(dot => {
+            const c = dot.dataset.color;
+            if (c === state.color && state.tool !== 'eraser') dot.classList.add('active');
+            else dot.classList.remove('active');
+        });
 
-        // Update Labels
-        this.element.querySelector('#label-size').textContent = `${t.size} (${state.size}px)`;
-        this.element.querySelector('#label-brush-opacity').textContent = `${t.brushOpacity} (${Math.round(state.brushOpacity * 100)}%)`;
-        this.element.querySelector('#label-bg-opacity').textContent = `${t.bgOpacity} (${Math.round(state.bgOpacity * 100)}%)`;
+        const isCustom = !this.colors.includes(state.color) && state.tool !== 'eraser';
+        const customWrapper = this.element.querySelector('.custom-color-wrapper');
 
-        // Update Sliders
-        this.element.querySelector('#size-slider').value = state.size;
-        this.element.querySelector('#brush-opacity-slider').value = state.brushOpacity;
-        this.element.querySelector('#bg-opacity-slider').value = state.bgOpacity;
+        if (isCustom) {
+            customWrapper.classList.add('active');
+            // Use selected color for border using CSS variable or style
+            customWrapper.style.setProperty('--active-color', state.color);
+            this.element.querySelector('.color-input').value = state.color;
+        } else {
+            customWrapper.classList.remove('active');
+            customWrapper.style.removeProperty('--active-color');
+        }
 
-        // Update Clear Btn
-        this.element.querySelector('#btn-clear').textContent = t.clear;
+        // 3. Update Slider Values (Text on buttons) and Inputs
+        // Size
+        const sizeInput = this.element.querySelector('#size-slider');
+        const sizeVal = this.element.querySelector('#val-size');
+        sizeVal.textContent = state.size;
+        if (document.activeElement !== sizeInput) sizeInput.value = state.size;
+
+        // Opacity
+        const opacityInput = this.element.querySelector('#brush-opacity-slider');
+        const opacityVal = this.element.querySelector('#val-opacity');
+        opacityVal.textContent = Math.round(state.brushOpacity * 100) + '%';
+        if (document.activeElement !== opacityInput) opacityInput.value = state.brushOpacity;
+
+        // Bg Opacity
+        const bgInput = this.element.querySelector('#bg-opacity-slider');
+        const bgVal = this.element.querySelector('#val-bg');
+        bgVal.textContent = Math.round(state.bgOpacity * 100) + '%';
+        if (document.activeElement !== bgInput) bgInput.value = state.bgOpacity;
     }
 
     attachEvents() {
-        // We need to use event delegation because render() might replace nodes 
-        // OR we just attach once and in update() we DONT replace the structure if possible.
-        // Actually, my render() overwrites everything. That's bad for attached events.
-        // Let's separate initial render structure vs update content.
-        // REFACTOR: The constructor calls render(). 
-        // I'll make the header events delegation on the main element.
-
+        // Delegation
         this.element.addEventListener('click', (e) => {
-            const target = e.target;
-
-            if (target.matches('.close-btn')) {
-                this.toggle();
+            const target = e.target.closest('button, .color-dot');
+            if (!target) {
+                // Check if clicking outside slider popups to close them
+                if (!e.target.closest('.slider-popup') && !e.target.closest('.slider-btn')) {
+                    this.element.querySelectorAll('.slider-popup.active').forEach(p => p.classList.remove('active'));
+                }
+                return;
             }
-            if (target.matches('.tool-btn[data-tool]')) {
+
+            if (target.matches('[data-tool]')) {
                 this.app.updateState({ tool: target.dataset.tool });
             }
-            if (target.matches('#btn-clear')) {
+            if (target.matches('.color-dot')) {
+                this.app.updateState({
+                    color: target.dataset.color,
+                    tool: 'brush'
+                });
+            }
+            if (target.id === 'btn-clear') {
                 this.app.canvasManager.clear();
             }
+            if (target.id === 'btn-hide') {
+                this.app.toggleCanvas();
+            }
+            // Toggle Sliders
+            if (target.matches('.slider-btn')) {
+                const popupId = target.dataset.popup;
+                const popup = this.element.querySelector(`#${popupId}`);
+
+                // Close others
+                this.element.querySelectorAll('.slider-popup').forEach(p => {
+                    if (p !== popup) p.classList.remove('active');
+                });
+
+                popup.classList.toggle('active');
+            }
         });
+
+        // Close sliders when clicking anywhere in window?
+        // We can't easily listen to window click from inside shadow DOM for "outside" click perfectly 
+        // without event propagation. But we can listen on the shadow host or document.
+        // For now, toolbar click handler handles "not on button" clicks. 
+        // Ideally we need a global listener.
+        // Let's add a document listener for outside clicks.
+
+        const closePopups = (e) => {
+            // If click is NOT inside toolbar
+            // Note: e.target might be in Shadow DOM or Light DOM.
+            // If we are in shadow DOM, we need to check composedPath.
+            const path = e.composedPath();
+            if (!path.includes(this.element)) {
+                this.element.querySelectorAll('.slider-popup.active').forEach(p => p.classList.remove('active'));
+            }
+        };
+        window.addEventListener('click', closePopups);
+        // Note: this listener will persist. Ideally remove on destroy.
 
         this.element.addEventListener('input', (e) => {
-            const target = e.target;
-            if (target.matches('.color-input')) {
-                this.app.updateState({ color: target.value, tool: 'brush' }); // Auto switch to brush on color pick
+            if (e.target.matches('.color-input')) {
+                this.app.updateState({
+                    color: e.target.value,
+                    tool: 'brush'
+                });
             }
-            if (target.id === 'size-slider') {
-                this.app.updateState({ size: parseInt(target.value) });
+            if (e.target.id === 'size-slider') {
+                this.app.updateState({ size: parseInt(e.target.value) });
             }
-            if (target.id === 'brush-opacity-slider') {
-                this.app.updateState({ brushOpacity: parseFloat(target.value) });
+            if (e.target.id === 'brush-opacity-slider') {
+                this.app.updateState({ brushOpacity: parseFloat(e.target.value) });
             }
-            if (target.id === 'bg-opacity-slider') {
-                this.app.updateState({ bgOpacity: parseFloat(target.value) });
+            if (e.target.id === 'bg-opacity-slider') {
+                this.app.updateState({ bgOpacity: parseFloat(e.target.value) });
             }
         });
-    }
-
-    toggle() {
-        this.isOpen = !this.isOpen;
-        if (this.isOpen) {
-            this.element.classList.add('open');
-            this.update(this.app.state); // Refresh state on open
-        } else {
-            this.element.classList.remove('open');
-        }
     }
 }
 
@@ -665,9 +743,25 @@ let appInstance = null;
 function initApp(initialLang) {
     if (!appInstance) {
         appInstance = new DraftBoardApp();
-        if (initialLang) {
-            appInstance.updateState({ lang: initialLang });
-        }
+
+        // Load settings
+        const hostname = window.location.hostname;
+        const settingsKey = `settings:${hostname}`;
+
+        chrome.storage.local.get([settingsKey], (result) => {
+            const saved = result[settingsKey];
+            const updates = {};
+            if (initialLang) updates.lang = initialLang;
+            if (saved) {
+                Object.assign(updates, saved);
+            }
+            if (Object.keys(updates).length > 0) {
+                appInstance.updateState(updates);
+            }
+        });
+    } else {
+        // Restore updates if instance exists (e.g. re-enable)
+        if (initialLang) appInstance.updateState({ lang: initialLang });
     }
 }
 
