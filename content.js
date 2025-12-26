@@ -155,7 +155,7 @@ class FloatingButton {
     }
 
     render() {
-        const logoUrl = chrome.runtime.getURL('logo.svg');
+        const logoUrl = chrome.runtime.getURL('assets/logo.svg');
         // No text needed for logo-only button
 
         this.element.innerHTML = `
